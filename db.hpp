@@ -203,7 +203,7 @@ namespace sl {
 		static void write(O& out, T&...arg) {
 			(([&]() {
 				out << encode(arg) << "&";
-				})(), ...);
+			})(), ...);
 			out.seekp(-1, std::ios_base::end);
 			out << '\n';
 		}
@@ -216,7 +216,7 @@ namespace sl {
 			(([&]() {
 				std::getline(record, buff2, '&');
 				std::istringstream(http::urlDecode(buff2)) >> arg;
-				})(), ...);
+			})(), ...);
 		}
 	};
 
