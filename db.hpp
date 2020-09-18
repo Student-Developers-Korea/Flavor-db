@@ -6,9 +6,25 @@
 #include <map>
 #include <vector>
 #include <sstream>
+#include <utility>
 #include <ctime>
 
 namespace sl {
+		
+	template <typename T, typename = void>
+	struct is_string {
+		static const bool value = false;
+	};
+
+	template <class T, class Traits, class Alloc>
+	struct is_string<std::basic_string<T, Traits, Alloc>, void> {
+		static const bool value = true;
+	};
+
+	template <class T, template <typename, typename, typename> class STRING>
+	struct is_string<T, STRING<T, std::char_traits<T>, std::allocator<T>>> {
+		static const bool value = true;
+	};
 
 	using strmap = typename std::map<std::string, std::string>;
 
@@ -47,33 +63,44 @@ namespace sl {
 
 		std::string urlDecode(std::string SRC) {
 			std::string ret;
-			char* st = (char*)(malloc(SRC.length() + 1));
-			strcpy(st, SRC.c_str());
-			_urldecode(st, SRC.c_str());
-			ret = st;
-			free(st);
-			return (ret);
-		}
-
-		strmap form(std::string encoded) {
-			strmap post;
-			std::istringstream iss(encoded);
-			std::string buff;
-			while (std::getline(iss, buff, '&')) {
-				std::string key;
-				std::string value;
-				int t = 0;
-				for (auto i : buff) {
-					if (i == '=') {
+			ret.reserve(SRC.length() / 2);
+			bool p = false;
+			for (auto& i : SRC) {
+				if (i == '|') {
+					p = true;
+				}
+				else if (i == ';') {
+					p = false;
+				}
+				else if (p) {
+					switch (i) {
+					case 'a':
+						ret.push_back('&');
+						break;
+					case 'c':
+						ret.push_back('\r');
+						break;
+					case 'l':
+						ret.push_back('\n');
+						break;
+					case 'o':
+						ret.push_back('|');
+						break;
+					case 's':
+						ret.push_back(';');
+						break;
+					case 'p':
+						ret.push_back(' ');
+						break;
+					default:
 						break;
 					}
-					t++;
 				}
-				key = buff.substr(0, t);
-				value = buff.substr(t + 1);
-				post.insert(std::pair(key, value));
+				else {
+					ret.push_back(i);
+				}
 			}
-			return post;
+			return ret;
 		}
 
 		static void hexchar(unsigned char c, unsigned char& hex1, unsigned char& hex2) {
@@ -85,39 +112,56 @@ namespace sl {
 
 		static std::string urlEncode(std::string s) {
 			const char* str = s.c_str();
-			std::vector<char> v(s.size());
-			v.clear();
-			for (size_t i = 0, l = s.size(); i < l; i++)
-			{
-				char c = str[i];
-				if ((c >= '0' && c <= '9') ||
-					(c >= 'a' && c <= 'z') ||
-					(c >= 'A' && c <= 'Z') ||
-					c == '-' || c == '_' || c == '.' || c == '!' || c == '~' ||
-					c == '*' || c == '\'' || c == '(' || c == ')')
-				{
-					v.push_back(c);
+			std::string ret;
+			ret.reserve(s.length());
+
+			for (auto& e : s) {
+				if (e == '&') {
+					ret.push_back('|');
+					ret.push_back('a');
+					ret.push_back(';');
 				}
-				else if (c == ' ')
-				{
-					v.push_back('+');
+				else if (e == '\r') {
+					ret.push_back('|');
+					ret.push_back('c');
+					ret.push_back(';');
 				}
-				else
-				{
-					v.push_back('%');
-					unsigned char d1, d2;
-					hexchar(c, d1, d2);
-					v.push_back(d1);
-					v.push_back(d2);
+				else if (e == '\n') {
+					ret.push_back('|');
+					ret.push_back('l');
+					ret.push_back(';');
+				}
+				else if (e == '|') {
+					ret.push_back('|');
+					ret.push_back('o');
+					ret.push_back(';');
+				}
+				else if (e == ';') {
+					ret.push_back('|');
+					ret.push_back('s');
+					ret.push_back(';');
+				}
+				else if (e == ' ') {
+					ret.push_back('|');
+					ret.push_back('p');
+					ret.push_back(';');
+				}
+				else {
+					ret.push_back(e);
 				}
 			}
-
-			return std::string(v.cbegin(), v.cend());
+			return ret;
 		}
 	}
 
 	template<class MODEL>
 	class Table {
+	private:
+		struct PtrCmp {
+			bool operator()(MODEL*a, MODEL*b) const {
+				return *a<*b;
+			}
+		};
 	public:
 		std::multiset<MODEL> tb;
 
@@ -158,6 +202,17 @@ namespace sl {
 			return ret;
 		}
 
+		std::vector<MODEL*> vec() {
+			std::vector<MODEL*> ret;
+			int i = 0;
+			tb.begin();
+			for (MODEL i : tb) {
+				ret.push_back(&i);
+			}
+			std::sort(ret.begin(), ret.end(), PtrCmp());
+			return ret;
+		}
+
 		decltype(*tb.begin()) first() {
 			return *tb.begin();
 		}
@@ -190,20 +245,120 @@ namespace sl {
 		}
 	};
 
+	template<class MODEL>
+	class pTable {
+	private:
+		struct PtrCmp {
+			bool operator()(MODEL* a, MODEL* b) const {
+				return *a < *b;
+			}
+		};
+	public:
+		std::multiset<MODEL*, PtrCmp> tb;
+
+		using iterator = typename decltype(tb)::iterator;
+
+		auto begin() {
+			return tb.begin();
+		}
+		auto end() {
+			return tb.end();
+		}
+
+		template<typename T>
+		Table<T> OrderBy() {
+			Table<T> ret;
+			for (auto& i : tb) {
+				ret.insert(T(*i));
+			}
+			return ret;
+		}
+
+		template<typename T>
+		Table<MODEL*> Where(T chk) {
+			Table<MODEL*> ret;
+			for (auto& i : tb) {
+				if (chk(*i)) {
+					ret.insert(i);
+				}
+			}
+			return ret;
+		}
+
+		Table<MODEL*> Select() {
+			Table<MODEL*> ret;
+			for (auto& i : tb) {
+				ret.insert(i);
+			}
+			return ret;
+		}
+
+		std::vector<MODEL*> vec() {
+			std::vector<MODEL*> ret;
+			int i = 0;
+			tb.begin();
+			for (MODEL* i : tb) {
+				ret.push_back(i);
+			}
+			std::sort(ret.begin(), ret.end(), PtrCmp());
+			return ret;
+		}
+
+		decltype(*tb.begin()) first() {
+			return *tb.begin();
+		}
+
+		template<class...R>
+		void insert(R...c) {
+			MODEL* rec = new MODEL(c...);
+			tb.insert(rec);
+		}
+
+		void insertRaw(MODEL c) {
+			MODEL* rec;
+			*rec = c;
+			tb.insert(rec);
+		}
+
+		template<class F>
+		void Delete(F cond) {
+			for (auto i = tb.begin(); i != tb.end(); i++) {
+				if (cond(**i)) {
+					tb.erase(i);
+				}
+			}
+		}
+
+		template<class _M, class F>
+		auto map(F func)->Table<_M> {
+			Table<_M> ret;
+			for (auto& i : tb) {
+				ret.insert(func(*i));
+			}
+			return ret;
+		}
+	};
+	
 	class Model {};
 
 	class Database {
-	private:
-		template<class O>
-		static auto encode(O a) {
-			return http::urlEncode((std::ostringstream() << a).str());
-		}
 	public:
+		/*template<class O, class T>
+		static void write(O& out, const T&arg) {
+			std::ostringstream oss;
+			oss << arg;
+			out << http::urlEncode(oss.str());;
+			out << '\n';
+		}*/
 		template<class O, class...T>
-		static void write(O& out, T&...arg) {
+		static void write(O& out, const T&...arg) {
 			(([&]() {
-				out << encode(arg) << "&";
+				std::ostringstream oss;
+				oss << arg;
+				out << http::urlEncode(oss.str());;
+				out << "&";
 			})(), ...);
+			// write(out, arg...);
 			out.seekp(-1, std::ios_base::end);
 			out << '\n';
 		}
@@ -215,7 +370,12 @@ namespace sl {
 
 			(([&]() {
 				std::getline(record, buff2, '&');
-				std::istringstream(http::urlDecode(buff2)) >> arg;
+				if (is_string<decltype(arg)>::value) {
+					arg = http::urlDecode(buff2);
+				}
+				else {
+					std::istringstream(http::urlDecode(buff2)) >> arg;
+				}
 			})(), ...);
 		}
 	};
