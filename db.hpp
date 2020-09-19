@@ -28,40 +28,8 @@ namespace sl {
 
 	using strmap = typename std::map<std::string, std::string>;
 
-	namespace http {
-		void _urldecode(char* dst, const char* src) {
-			char a, b;
-			while (*src) {
-				if ((*src == '%') &&
-					((a = src[1]) && (b = src[2])) &&
-					(isxdigit(a) && isxdigit(b))) {
-					if (a >= 'a')
-						a -= 'a' - 'A';
-					if (a >= 'A')
-						a -= ('A' - 10);
-					else
-						a -= '0';
-					if (b >= 'a')
-						b -= 'a' - 'A';
-					if (b >= 'A')
-						b -= ('A' - 10);
-					else
-						b -= '0';
-					*dst++ = 16 * a + b;
-					src += 3;
-				}
-				else if (*src == '+') {
-					*dst++ = ' ';
-					src++;
-				}
-				else {
-					*dst++ = *src++;
-				}
-			}
-			*dst++ = '\0';
-		}
-
-		std::string urlDecode(std::string SRC) {
+	namespace code {
+		std::string decode(std::string SRC) {
 			std::string ret;
 			ret.reserve(SRC.length() / 2);
 			bool p = false;
@@ -103,14 +71,7 @@ namespace sl {
 			return ret;
 		}
 
-		static void hexchar(unsigned char c, unsigned char& hex1, unsigned char& hex2) {
-			hex1 = c / 16;
-			hex2 = c % 16;
-			hex1 += hex1 <= 9 ? '0' : 'a' - 10;
-			hex2 += hex2 <= 9 ? '0' : 'a' - 10;
-		}
-
-		static std::string urlEncode(std::string s) {
+		static std::string encode(std::string s) {
 			const char* str = s.c_str();
 			std::string ret;
 			ret.reserve(s.length());
@@ -343,22 +304,15 @@ namespace sl {
 
 	class Database {
 	public:
-		/*template<class O, class T>
-		static void write(O& out, const T&arg) {
-			std::ostringstream oss;
-			oss << arg;
-			out << http::urlEncode(oss.str());;
-			out << '\n';
-		}*/
 		template<class O, class...T>
 		static void write(O& out, const T&...arg) {
 			(([&]() {
 				std::ostringstream oss;
 				oss << arg;
-				out << http::urlEncode(oss.str());;
+				out << code::encode(oss.str());;
 				out << "&";
 			})(), ...);
-			// write(out, arg...);
+			
 			out.seekp(-1, std::ios_base::end);
 			out << '\n';
 		}
@@ -371,10 +325,10 @@ namespace sl {
 			(([&]() {
 				std::getline(record, buff2, '&');
 				if (is_string<decltype(arg)>::value) {
-					arg = http::urlDecode(buff2);
+					arg = code::decode(buff2);
 				}
 				else {
-					std::istringstream(http::urlDecode(buff2)) >> arg;
+					std::istringstream(code::decode(buff2)) >> arg;
 				}
 			})(), ...);
 		}
