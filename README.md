@@ -1,4 +1,4 @@
-# Flavor-db | 플레이버 DB
+# naname-db | 이름없는 DB
 in memory database library
 인메모리 데이터베이스 라이브러리
 
